@@ -170,12 +170,31 @@ go mod init github.com/ykargin/filekeeper
 # Get dependencies
 go get gopkg.in/yaml.v3
 
-# Run tests
-go test ./...
-
 # Build for development
 go build -o filekeeper
 ```
+
+## Testing
+
+FileKeeper includes a comprehensive test suite to ensure reliability and correctness:
+
+```bash
+# Run all tests
+go test -v ./...
+
+# Use the convenience script
+./run_tests.sh
+```
+
+The test suite covers:
+- Configuration loading and validation
+- File retention period parsing
+- Directory processing and file deletion logic
+- Secure deletion functionality
+- Empty directory detection and removal
+- Systemd service file generation
+
+When adding new features or fixing bugs, please ensure that appropriate tests are added or updated.
 
 ## Security Considerations
 
