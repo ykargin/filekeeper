@@ -64,8 +64,8 @@ type SecureDeleteConfig struct {
 
 // Global variables
 var (
-	isRoot    bool
-	configDir string
+	isRoot     bool
+	configDir  string
 	configFile string
 )
 
@@ -93,19 +93,19 @@ func init() {
 
 // ParseDuration parses a duration string like "30d", "24h", "60m"
 func ParseDuration(durationStr string) (time.Duration, error) {
-    // Handle days specially since Go doesn't have a built-in "d" unit
-    if strings.HasSuffix(durationStr, "d") {
-        value := strings.TrimSuffix(durationStr, "d")
-        var days int
-        _, err := fmt.Sscanf(value, "%d", &days)
-        if err == nil {
-            return time.Hour * 24 * time.Duration(days), nil
-        }
-        return 0, fmt.Errorf("invalid day format: %s", durationStr)
-    }
+	// Handle days specially since Go doesn't have a built-in "d" unit
+	if strings.HasSuffix(durationStr, "d") {
+		value := strings.TrimSuffix(durationStr, "d")
+		var days int
+		_, err := fmt.Sscanf(value, "%d", &days)
+		if err == nil {
+			return time.Hour * 24 * time.Duration(days), nil
+		}
+		return 0, fmt.Errorf("invalid day format: %s", durationStr)
+	}
 
-    // For other units, use the standard time.ParseDuration
-    return time.ParseDuration(durationStr)
+	// For other units, use the standard time.ParseDuration
+	return time.ParseDuration(durationStr)
 }
 
 // GetDefaultConfig returns a default configuration
@@ -153,10 +153,11 @@ func WriteExampleConfig(configPath string) error {
 	}
 
 	config := GetDefaultConfig()
-	data, err := yaml.Marshal(&config)
-	if err != nil {
-		return err
-	}
+	// Удаляем неиспользуемую переменную data
+	// data, err := yaml.Marshal(&config)
+	// if err != nil {
+	//     return err
+	// }
 
 	// Add comments to the yaml file
 	configWithComments := `# General settings
@@ -202,7 +203,7 @@ security:
 // CreateSystemdFiles creates the systemd service and timer files
 func CreateSystemdFiles(userMode bool) error {
 	var systemdDir string
-	
+
 	// Determine the systemd directory based on whether we're in user mode
 	if userMode {
 		homeDir, err := os.UserHomeDir()
@@ -281,7 +282,7 @@ WantedBy=timers.target
 	fmt.Println("Systemd files created successfully:")
 	fmt.Println("  - Service: " + servicePath)
 	fmt.Println("  - Timer: " + timerPath)
-	
+
 	if userMode {
 		fmt.Println("\nTo activate, run:")
 		fmt.Println("  systemctl --user daemon-reload")
@@ -429,7 +430,7 @@ func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, 
 	// Second pass: remove empty directories if configured
 	if dirConfig.RemoveEmptyDirs {
 		logger.Printf("Checking for empty directories in %s", dirConfig.Path)
-		
+
 		// We need to walk from the deepest directories first
 		var dirs []string
 		walkDirsFn := func(path string, info os.FileInfo, err error) error {
@@ -449,7 +450,7 @@ func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, 
 		// Sort directories by depth (most nested first)
 		for i := len(dirs) - 1; i >= 0; i-- {
 			dir := dirs[i]
-			
+
 			// Skip if we're excluding subdirectories
 			if dirConfig.ExcludeSubdirs && dir != dirConfig.Path {
 				continue
@@ -522,7 +523,7 @@ func secureDeleteFile(path string, passes int, logger *log.Logger) error {
 	// Perform the secure deletion passes
 	for pass := 0; pass < passes; pass++ {
 		logger.Printf("Secure delete pass %d/%d for %s", pass+1, passes, path)
-		
+
 		// Reset to beginning of file
 		if _, err := file.Seek(0, 0); err != nil {
 			return err
@@ -540,14 +541,14 @@ func secureDeleteFile(path string, passes int, logger *log.Logger) error {
 			if remaining < writeSize {
 				writeSize = remaining
 			}
-			
+
 			if _, err := file.Write(buf[:writeSize]); err != nil {
 				return err
 			}
-			
+
 			remaining -= writeSize
 		}
-		
+
 		// Flush to disk
 		if err := file.Sync(); err != nil {
 			return err
@@ -603,7 +604,7 @@ func PrintHelp() {
 	fmt.Println("  --systemd-template-only Output systemd templates without creating files")
 	fmt.Println("  --dry-run               Run without actually deleting any files")
 	fmt.Println("  --force                 Run even if disabled in the configuration")
-	
+
 	fmt.Println("\nDefault configuration paths:")
 	if isRoot {
 		fmt.Println("  - System config (root): /etc/filekeeper/filekeeper.yaml")
@@ -611,7 +612,7 @@ func PrintHelp() {
 		homeDir, _ := os.UserHomeDir()
 		fmt.Println("  - User config: " + filepath.Join(homeDir, ".config", "filekeeper.yaml"))
 	}
-	
+
 	fmt.Println("\nExamples:")
 	fmt.Println("  filekeeper --init                   # Create default configuration")
 	fmt.Println("  filekeeper                          # Run with default configuration")
@@ -622,14 +623,14 @@ func PrintHelp() {
 func main() {
 	// Parse command line flags
 	var (
-		showHelp           bool
-		showVersion        bool
-		initConfig         bool
-		configPath         string
-		installSystemd     bool
+		showHelp            bool
+		showVersion         bool
+		initConfig          bool
+		configPath          string
+		installSystemd      bool
 		systemdTemplateOnly bool
-		dryRun             bool
-		force              bool
+		dryRun              bool
+		force               bool
 	)
 
 	flag.BoolVar(&showHelp, "help", false, "Show help information")
