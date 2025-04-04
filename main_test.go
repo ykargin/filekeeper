@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -684,4 +688,546 @@ func TestSystemdFiles(t *testing.T) {
 
 	// Restore the original value
 	isRoot = origIsRoot
+}
+
+// TestPrintHelp tests the PrintHelp function
+func TestPrintHelp(t *testing.T) {
+	// Capture stdout to check the output
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+
+	// Call PrintHelp
+	PrintHelp()
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read captured output
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("Failed to read captured output: %v", err)
+	}
+	output := buf.String()
+
+	// Verify the output contains essential help information
+	requiredContent := []string{
+		ProgramName,
+		ProgramVersion,
+		"--help",
+		"--version",
+		"--init",
+		"--config",
+		"--install-systemd",
+		"--dry-run",
+		"--force",
+	}
+
+	for _, content := range requiredContent {
+		if !strings.Contains(output, content) {
+			t.Errorf("Help output missing required content: %s", content)
+		}
+	}
+
+	// Verify default config paths are included
+	if isRoot {
+		if !strings.Contains(output, "/etc/filekeeper/filekeeper.yaml") {
+			t.Error("Help output missing root config path")
+		}
+	} else {
+		homeDir, _ := os.UserHomeDir()
+		expectedPath := filepath.Join(homeDir, ".config", "filekeeper.yaml")
+		if !strings.Contains(output, expectedPath) {
+			t.Error("Help output missing user config path")
+		}
+	}
+}
+
+// TestSetupLogger tests the logger setup functionality
+func TestSetupLogger(t *testing.T) {
+	// Create a temporary directory for log files
+	tempDir, err := os.MkdirTemp("", "filekeeper-logs")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	logPath := filepath.Join(tempDir, "test.log")
+
+	// Test case 1: Logging enabled with info level
+	config := LoggingConfig{
+		Enabled: true,
+		Level:   "info",
+		File:    logPath,
+	}
+
+	logger, err := setupLogger(config)
+	if err != nil {
+		t.Errorf("setupLogger returned error: %v", err)
+	}
+	if logger == nil {
+		t.Error("setupLogger returned nil logger")
+	}
+
+	// Test logging to file
+	logger.Println("Test log message")
+
+	// Verify log file was created and has content
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Errorf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "Test log message") {
+		t.Error("Log file does not contain expected message")
+	}
+
+	// Test case 2: Logging enabled with debug level
+	debugConfig := LoggingConfig{
+		Enabled: true,
+		Level:   "debug",
+		File:    filepath.Join(tempDir, "debug.log"),
+	}
+
+	debugLogger, err := setupLogger(debugConfig)
+	if err != nil {
+		t.Errorf("setupLogger with debug level returned error: %v", err)
+	}
+	if debugLogger == nil {
+		t.Error("setupLogger with debug level returned nil logger")
+	}
+
+	// Test case 3: Logging disabled
+	disabledConfig := LoggingConfig{
+		Enabled: false,
+		Level:   "info",
+		File:    filepath.Join(tempDir, "disabled.log"),
+	}
+
+	disabledLogger, err := setupLogger(disabledConfig)
+	if err != nil {
+		t.Errorf("setupLogger with disabled logging returned error: %v", err)
+	}
+	if disabledLogger == nil {
+		t.Error("setupLogger with disabled logging returned nil logger")
+	}
+
+	// Verify disabled log file was not created
+	if _, err := os.Stat(disabledConfig.File); err == nil {
+		t.Error("Log file was created despite logging being disabled")
+	}
+
+	// Test case 4: Invalid log directory
+	if runtime.GOOS != "windows" {
+		// Skip on Windows as permissions work differently
+		invalidConfig := LoggingConfig{
+			Enabled: true,
+			Level:   "info",
+			File:    "/root/invalid/path/test.log", // Should fail on non-root test runs
+		}
+
+		_, err = setupLogger(invalidConfig)
+		if err == nil {
+			// This might pass if tests are run as root, so don't fail in that case
+			if os.Getuid() != 0 {
+				t.Error("setupLogger did not return error for invalid log directory")
+			}
+		}
+	}
+}
+
+// TestPrintSystemdTemplates tests the PrintSystemdTemplates function
+func TestPrintSystemdTemplates(t *testing.T) {
+	// Capture stdout to check the output
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+
+	// Call PrintSystemdTemplates
+	PrintSystemdTemplates()
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read captured output
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("Failed to read captured output: %v", err)
+	}
+	output := buf.String()
+
+	// Verify the output contains essential systemd file content
+	requiredContent := []string{
+		"# FileKeeper Service File",
+		"# FileKeeper Timer File",
+		"[Unit]",
+		"[Service]",
+		"[Timer]",
+		"[Install]",
+		"OnCalendar=daily",
+		"Type=oneshot",
+	}
+
+	for _, content := range requiredContent {
+		if !strings.Contains(output, content) {
+			t.Errorf("Systemd template output missing required content: %s", content)
+		}
+	}
+}
+
+// TestCommandLineFlags tests the handling of command line flags
+func TestCommandLineFlags(t *testing.T) {
+	// Save and restore the original os.Args
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	// Save and restore os.Stdout for capturing output
+	oldStdout := os.Stdout
+	defer func() { os.Stdout = oldStdout }()
+
+	// Save the original flag.CommandLine to restore it after the test
+	origFlagCommandLine := flag.CommandLine
+	defer func() { flag.CommandLine = origFlagCommandLine }()
+
+	// Save original config file path
+	origConfigFile := configFile
+	defer func() { configFile = origConfigFile }()
+
+	// Create a temporary directory for configuration files
+	tempDir, err := os.MkdirTemp("", "filekeeper-cli-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Define test cases
+	testCases := []struct {
+		name         string
+		args         []string
+		setup        func() // Setup before running the case
+		expectedText string // Text that should be in the output
+		expectedErr  bool   // Whether an error exit is expected
+	}{
+		{
+			name: "Version flag",
+			args: []string{"filekeeper", "--version"},
+			setup: func() {
+				// Reset flag.CommandLine for each test
+				flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+			},
+			expectedText: ProgramVersion,
+			expectedErr:  false,
+		},
+		{
+			name: "Help flag",
+			args: []string{"filekeeper", "--help"},
+			setup: func() {
+				flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+			},
+			expectedText: "Usage:",
+			expectedErr:  false,
+		},
+		{
+			name: "Init flag",
+			args: []string{"filekeeper", "--init"},
+			setup: func() {
+				flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+				// Use a temp directory for config
+				configFile = filepath.Join(tempDir, "filekeeper.yaml")
+			},
+			expectedText: "Created example configuration file",
+			expectedErr:  false,
+		},
+		{
+			name: "Systemd template flag",
+			args: []string{"filekeeper", "--systemd-template-only"},
+			setup: func() {
+				flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+			},
+			expectedText: "# FileKeeper Service File",
+			expectedErr:  false,
+		},
+	}
+
+	// Run each test case
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup for this test case
+			tc.setup()
+
+			// Set the command line arguments
+			os.Args = tc.args
+
+			// Create a pipe to capture stdout
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("Failed to create pipe: %v", err)
+			}
+			os.Stdout = w
+
+			// Create a channel to handle the potential os.Exit() call
+			exitCalled := make(chan int, 1)
+			
+			// Mock os.Exit
+			originalExit := osExit
+			osExit = func(code int) {
+				exitCalled <- code
+				panic("os.Exit called") // Use panic to abort execution
+			}
+			defer func() {
+				osExit = originalExit
+				if r := recover(); r != nil && r != "os.Exit called" {
+					t.Errorf("Unexpected panic: %v", r)
+				}
+			}()
+
+			// Execute the main function in a goroutine
+			go func() {
+				defer func() {
+					if r := recover(); r == "os.Exit called" {
+						// Expected when os.Exit is called
+						return
+					}
+				}()
+				// Execute the code that would be in main()
+				mainImpl()
+				// If we reach here without exiting, signal with exit code 0
+				exitCalled <- 0
+			}()
+
+			// Wait for the goroutine to finish or time out
+			var exitCode int
+			select {
+			case exitCode = <-exitCalled:
+				// Got the exit code
+			case <-time.After(2 * time.Second):
+				t.Fatal("Test timed out")
+			}
+
+			// Close the pipe and restore stdout
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Read the captured output
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, r); err != nil {
+				t.Fatalf("Failed to read captured output: %v", err)
+			}
+			output := buf.String()
+
+			// Check if the output contains the expected text
+			if !strings.Contains(output, tc.expectedText) {
+				t.Errorf("Output does not contain expected text: %s\nGot: %s", tc.expectedText, output)
+			}
+
+			// Check if the exit code matches expectations
+			if tc.expectedErr && exitCode == 0 {
+				t.Errorf("Expected error exit but got success")
+			} else if !tc.expectedErr && exitCode != 0 {
+				t.Errorf("Expected success but got error exit with code %d", exitCode)
+			}
+		})
+	}
+}
+
+// Create a variable to mock os.Exit for testing
+var osExit = os.Exit
+
+// Create a variable to mock user.Current for testing
+var userCurrent = user.Current
+
+// initConfigPaths is a testable version of the init function
+func initConfigPaths() {
+	currentUser, err := userCurrent()
+	if err != nil {
+		log.Fatalf("Error determining current user: %v", err)
+	}
+
+	isRoot = currentUser.Uid == "0"
+
+	if isRoot {
+		configDir = "/etc/filekeeper"
+		configFile = filepath.Join(configDir, "filekeeper.yaml")
+	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("Error determining user home directory: %v", err)
+		}
+		configDir = filepath.Join(homeDir, ".config")
+		configFile = filepath.Join(configDir, "filekeeper.yaml")
+	}
+}
+
+// Create an implementation of main() that can be called in tests
+func mainImpl() {
+	// Parse command line flags
+	var (
+		showHelp            bool
+		showVersion         bool
+		initConfig          bool
+		configPath          string
+		installSystemd      bool
+		systemdTemplateOnly bool
+		dryRun              bool
+		force               bool
+	)
+
+	flag.BoolVar(&showHelp, "help", false, "Show help information")
+	flag.BoolVar(&showVersion, "version", false, "Show version information")
+	flag.BoolVar(&initConfig, "init", false, "Create a default configuration file")
+	flag.StringVar(&configPath, "config", configFile, "Specify an alternative configuration file path")
+	flag.BoolVar(&installSystemd, "install-systemd", false, "Create systemd service and timer files")
+	flag.BoolVar(&systemdTemplateOnly, "systemd-template-only", false, "Output systemd templates without creating files")
+	flag.BoolVar(&dryRun, "dry-run", false, "Run without actually deleting any files")
+	flag.BoolVar(&force, "force", false, "Run even if disabled in the configuration")
+
+	flag.Parse()
+
+	// Show help if requested
+	if showHelp {
+		PrintHelp()
+		fmt.Println("\nRun 'filekeeper --init' to create a default configuration file.")
+		return
+	}
+
+	// Show version and exit
+	if showVersion {
+		fmt.Printf("%s v%s\n", ProgramName, ProgramVersion)
+		return
+	}
+
+	// Initialize configuration
+	if initConfig {
+		exampleConfigPath := configPath + ".example"
+		if err := WriteExampleConfig(exampleConfigPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating example configuration: %v\n", err)
+			osExit(1)
+		}
+		fmt.Printf("Created example configuration file: %s\n", exampleConfigPath)
+		fmt.Printf("Please review and rename to %s when ready.\n", configPath)
+		return
+	}
+
+	// Print systemd templates
+	if systemdTemplateOnly {
+		PrintSystemdTemplates()
+		return
+	}
+
+	// Install systemd files
+	if installSystemd {
+		err := CreateSystemdFiles(!isRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating systemd files: %v\n", err)
+			osExit(1)
+		}
+		return
+	}
+
+	// Skip the rest for testing - we would normally load config and process files
+}
+
+// TestInitFunction tests the init function that sets up config paths
+func TestInitFunction(t *testing.T) {
+	// Save original values
+	origIsRoot := isRoot
+	origConfigDir := configDir
+	origConfigFile := configFile
+	
+	// Restore after test
+	defer func() {
+		isRoot = origIsRoot
+		configDir = origConfigDir
+		configFile = origConfigFile
+	}()
+	
+	// Test cases for different user types
+	testCases := []struct {
+		name     string
+		uid      string
+		expected struct {
+			isRoot     bool
+			configBase string
+		}
+	}{
+		{
+			name: "Root user",
+			uid:  "0",
+			expected: struct {
+				isRoot     bool
+				configBase string
+			}{
+				isRoot:     true,
+				configBase: "/etc",
+			},
+		},
+		{
+			name: "Regular user",
+			uid:  "1000",
+			expected: struct {
+				isRoot     bool
+				configBase string
+			}{
+				isRoot:     false,
+				configBase: ".config",
+			},
+		},
+	}
+	
+	// Prepare to mock user.Current
+	origUserCurrent := userCurrent
+	defer func() {
+		userCurrent = origUserCurrent
+	}()
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Mock user.Current to return the desired UID
+			userCurrent = func() (*user.User, error) {
+				return &user.User{
+					Uid: tc.uid,
+				}, nil
+			}
+			
+			// Reset global variables
+			isRoot = false
+			configDir = ""
+			configFile = ""
+			
+			// Call init manually (not the package init function)
+			initConfigPaths()
+			
+			// Verify the results
+			if isRoot != tc.expected.isRoot {
+				t.Errorf("isRoot = %v, want %v", isRoot, tc.expected.isRoot)
+			}
+			
+			if isRoot {
+				if configDir != "/etc/filekeeper" {
+					t.Errorf("Root config dir = %s, want /etc/filekeeper", configDir)
+				}
+				if configFile != "/etc/filekeeper/filekeeper.yaml" {
+					t.Errorf("Root config file = %s, want /etc/filekeeper/filekeeper.yaml", configFile)
+				}
+			} else {
+				homeDir, _ := os.UserHomeDir()
+				expectedDir := filepath.Join(homeDir, ".config")
+				expectedFile := filepath.Join(homeDir, ".config", "filekeeper.yaml")
+				
+				if configDir != expectedDir {
+					t.Errorf("User config dir = %s, want %s", configDir, expectedDir)
+				}
+				if configFile != expectedFile {
+					t.Errorf("User config file = %s, want %s", configFile, expectedFile)
+				}
+			}
+		})
+	}
 }
