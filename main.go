@@ -4,7 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"os/user"
@@ -93,19 +93,38 @@ func init() {
 
 // ParseDuration parses a duration string like "30d", "24h", "60m"
 func ParseDuration(durationStr string) (time.Duration, error) {
+	// Check for empty string
+	if durationStr == "" {
+		return 0, fmt.Errorf("empty duration string")
+	}
+
 	// Handle days specially since Go doesn't have a built-in "d" unit
 	if strings.HasSuffix(durationStr, "d") {
 		value := strings.TrimSuffix(durationStr, "d")
 		var days int
 		_, err := fmt.Sscanf(value, "%d", &days)
 		if err == nil {
+			// Check for negative days
+			if days < 0 {
+				return 0, fmt.Errorf("negative duration not allowed: %s", durationStr)
+			}
 			return time.Hour * 24 * time.Duration(days), nil
 		}
 		return 0, fmt.Errorf("invalid day format: %s", durationStr)
 	}
 
 	// For other units, use the standard time.ParseDuration
-	return time.ParseDuration(durationStr)
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Check for negative duration
+	if duration < 0 {
+		return 0, fmt.Errorf("negative duration not allowed: %s", durationStr)
+	}
+	
+	return duration, nil
 }
 
 // GetDefaultConfig returns a default configuration
@@ -153,7 +172,7 @@ func WriteExampleConfig(configPath string) error {
 	}
 
 	config := GetDefaultConfig()
-	// Удаляем неиспользуемую переменную data
+	// Removed unused variable data
 	// data, err := yaml.Marshal(&config)
 	// if err != nil {
 	//     return err
@@ -197,7 +216,7 @@ security:
     passes: 3
 `
 
-	return ioutil.WriteFile(configPath, []byte(configWithComments), 0644)
+	return os.WriteFile(configPath, []byte(configWithComments), 0644)
 }
 
 // CreateSystemdFiles creates the systemd service and timer files
@@ -255,7 +274,7 @@ WantedBy=default.target
 	}
 
 	servicePath := filepath.Join(systemdDir, "filekeeper.service")
-	if err := ioutil.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
 		return err
 	}
 
@@ -274,7 +293,7 @@ WantedBy=timers.target
 `
 
 	timerPath := filepath.Join(systemdDir, "filekeeper.timer")
-	if err := ioutil.WriteFile(timerPath, []byte(timerContent), 0644); err != nil {
+	if err := os.WriteFile(timerPath, []byte(timerContent), 0644); err != nil {
 		return err
 	}
 
@@ -300,8 +319,7 @@ WantedBy=timers.target
 func PrintSystemdTemplates() {
 	fmt.Println("# FileKeeper Service File (filekeeper.service)")
 	fmt.Println("# Save to /etc/systemd/system/ (for system-wide) or ~/.config/systemd/user/ (for user)")
-	fmt.Println(`
-[Unit]
+	fmt.Println(`[Unit]
 Description=FileKeeper - Schedule file cleanup based on retention policy
 Documentation=https://github.com/ykargin/filekeeper
 
@@ -316,13 +334,11 @@ PrivateTmp=true
 NoNewPrivileges=true
 
 [Install]
-WantedBy=multi-user.target
-`)
+WantedBy=multi-user.target`)
 
 	fmt.Println("\n# FileKeeper Timer File (filekeeper.timer)")
 	fmt.Println("# Save to /etc/systemd/system/ (for system-wide) or ~/.config/systemd/user/ (for user)")
-	fmt.Println(`
-[Unit]
+	fmt.Println(`[Unit]
 Description=Run FileKeeper daily to clean up old files
 Documentation=https://github.com/ykargin/filekeeper
 
@@ -332,13 +348,12 @@ Persistent=true
 RandomizedDelaySec=1hour
 
 [Install]
-WantedBy=timers.target
-`)
+WantedBy=timers.target`)
 }
 
 // LoadConfig loads the configuration from a file
 func LoadConfig(configPath string) (Config, error) {
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return Config{}, err
 	}
@@ -354,6 +369,11 @@ func LoadConfig(configPath string) (Config, error) {
 // ProcessDirectory processes a directory according to its configuration
 func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, logger *log.Logger) error {
 	logger.Printf("Processing directory: %s", dirConfig.Path)
+
+	// Check if directory exists
+	if _, err := os.Stat(dirConfig.Path); os.IsNotExist(err) {
+		return fmt.Errorf("directory does not exist: %s", dirConfig.Path)
+	}
 
 	// Parse retention period
 	retention, err := ParseDuration(dirConfig.RetentionPeriod)
@@ -564,7 +584,7 @@ func secureDeleteFile(path string, passes int, logger *log.Logger) error {
 func setupLogger(config LoggingConfig) (*log.Logger, error) {
 	if !config.Enabled {
 		// If logging is disabled, use a no-op logger
-		return log.New(ioutil.Discard, "", 0), nil
+		return log.New(io.Discard, "", 0), nil
 	}
 
 	// Ensure the log directory exists
