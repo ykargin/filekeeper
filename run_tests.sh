@@ -7,8 +7,16 @@ if ! command -v go &> /dev/null; then
     exit 1
 fi
 
+# Ensure go.mod exists
+if [ ! -f go.mod ]; then
+    echo "Initializing Go module..."
+    go mod init github.com/ykargin/filekeeper
+    go mod tidy
+fi
+
 echo "Running tests for FileKeeper..."
-go test -v ./...
+# Use the current directory instead of ./...
+go test -v .
 
 # Check if tests passed
 if [ $? -eq 0 ]; then

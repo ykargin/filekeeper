@@ -182,7 +182,7 @@ FileKeeper includes a comprehensive test suite to ensure reliability and correct
 
 ```bash
 # Run all tests
-go test -v ./...
+go test -v .
 
 # Use the convenience script
 ./run_tests.sh

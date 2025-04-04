@@ -26,7 +26,7 @@ Thank you for your interest in contributing to FileKeeper! This document provide
 FileKeeper includes a comprehensive test suite. You can run all tests with:
 
 ```bash
-go test -v ./...
+go test -v .
 ```
 
 Or use the provided convenience script:
@@ -40,8 +40,14 @@ Or use the provided convenience script:
 To get coverage metrics:
 
 ```bash
-go test -coverprofile=coverage.txt -covermode=atomic ./...
+go test -coverprofile=coverage.txt -covermode=atomic .
 go tool cover -html=coverage.txt -o coverage.html
+```
+
+Or use the provided convenience script:
+
+```bash
+./coverage.sh
 ```
 
 Then open `coverage.html` in your browser to see the coverage report.

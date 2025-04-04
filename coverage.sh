@@ -3,8 +3,15 @@
 
 echo "Generating code coverage report for FileKeeper..."
 
+# Ensure go.mod exists
+if [ ! -f go.mod ]; then
+    echo "Initializing Go module..."
+    go mod init github.com/ykargin/filekeeper
+    go mod tidy
+fi
+
 # Run tests with coverage profiling
-go test -v ./... -coverprofile=coverage.txt -covermode=atomic
+go test -v . -coverprofile=coverage.txt -covermode=atomic
 
 # Check if test passed
 if [ $? -ne 0 ]; then
