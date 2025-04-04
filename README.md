@@ -174,6 +174,8 @@ go get gopkg.in/yaml.v3
 go build -o filekeeper
 ```
 
+For more detailed instructions on contributing, please see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Testing
 
 FileKeeper includes a comprehensive test suite to ensure reliability and correctness:
@@ -186,6 +188,14 @@ go test -v ./...
 ./run_tests.sh
 ```
 
+To generate a code coverage report:
+
+```bash
+./coverage.sh
+```
+
+This will create an HTML report (`coverage.html`) showing which parts of the code are covered by tests.
+
 The test suite covers:
 - Configuration loading and validation
 - File retention period parsing
@@ -194,7 +204,21 @@ The test suite covers:
 - Empty directory detection and removal
 - Systemd service file generation
 
-When adding new features or fixing bugs, please ensure that appropriate tests are added or updated.
+## Releasing
+
+A release script is provided to help with versioning and releasing new versions:
+
+```bash
+./release.sh 0.1.5
+```
+
+This script:
+1. Runs all tests to ensure everything works
+2. Updates the version number in the source code
+3. Commits the version change
+4. Creates a Git tag for the release
+
+After running this script, you can push the changes and tag to GitHub, which will trigger the CI/CD pipeline to build and publish the release.
 
 ## Security Considerations
 
