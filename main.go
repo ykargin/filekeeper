@@ -101,7 +101,7 @@ func ParseDuration(durationStr string) (time.Duration, error) {
         if err == nil {
             return time.Hour * 24 * time.Duration(days), nil
         }
-        return 0, err
+        return 0, fmt.Errorf("invalid day format: %s", durationStr)
     }
 
     // For other units, use the standard time.ParseDuration
