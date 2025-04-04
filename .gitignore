@@ -1,0 +1,34 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+filekeeper
+
+# Build output directory
+build/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# IDE folders
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Go workspace file
+go.work
+
+# Local files
+*.log

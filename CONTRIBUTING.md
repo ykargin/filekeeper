@@ -21,6 +21,15 @@ Thank you for your interest in contributing to FileKeeper! This document provide
    go get gopkg.in/yaml.v3
    ```
 
+4. **Build for development**
+   ```bash
+   # Build for your current architecture
+   go build -o filekeeper
+   
+   # Build for all supported architectures
+   ./build_all.sh
+   ```
+
 ## Running Tests
 
 FileKeeper includes a comprehensive test suite. You can run all tests with:
@@ -29,11 +38,13 @@ FileKeeper includes a comprehensive test suite. You can run all tests with:
 go test -v .
 ```
 
-Or use the provided convenience script:
+Or use the provided convenience script, which not only runs tests but also verifies that the code can be compiled for all supported architectures (amd64, arm, arm64):
 
 ```bash
 ./run_tests.sh
 ```
+
+Note: The actual test execution only happens on your native architecture, but the script verifies that the code successfully compiles for all target architectures.
 
 ### Test Coverage
 

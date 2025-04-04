@@ -30,7 +30,7 @@ jobs:
       run: go get -v gopkg.in/yaml.v3
 
     - name: Run tests
-      run: go test -v ./... -coverprofile=coverage.txt -covermode=atomic
+      run: go test -v . -coverprofile=coverage.txt -covermode=atomic
 
     - name: Upload coverage report
       uses: codecov/codecov-action@v3
@@ -40,25 +40,12 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
-  build:
-    name: Build
+  lint:
+    name: Lint
     needs: test
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        include:
-          - os: ubuntu-latest
-            artifact_name: filekeeper-linux-amd64
-            asset_name: filekeeper-linux-amd64
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-
-    - name: Debug info
-      run: |
-        echo "GitHub ref: ${{ github.ref }}"
-        echo "GitHub event name: ${{ github.event_name }}"
-        echo "Is tag: ${{ startsWith(github.ref, 'refs/tags/') }}"
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -79,7 +66,53 @@ jobs:
         version: latest
         args: --timeout=5m
 
-    - name: Build
+  build:
+    name: Build
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        arch: [amd64, arm, arm64]
+        include:
+          - arch: amd64
+            goarch: amd64
+            artifact_name: filekeeper-linux-amd64
+          - arch: arm
+            goarch: arm
+            goarm: 7
+            artifact_name: filekeeper-linux-arm-v7
+          - arch: arm64
+            goarch: arm64
+            artifact_name: filekeeper-linux-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Debug info
+      run: |
+        echo "GitHub ref: ${{ github.ref }}"
+        echo "GitHub event name: ${{ github.event_name }}"
+        echo "Is tag: ${{ startsWith(github.ref, 'refs/tags/') }}"
+        echo "Building for architecture: ${{ matrix.arch }}"
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.20'
+
+    - name: Set up Go modules
+      run: |
+        go mod init github.com/ykargin/filekeeper
+        go mod tidy
+
+    - name: Install dependencies
+      run: go get -v gopkg.in/yaml.v3
+
+    - name: Build for ${{ matrix.arch }}
+      env:
+        GOOS: linux
+        GOARCH: ${{ matrix.goarch }}
+        GOARM: ${{ matrix.goarm }}
       run: go build -v -o ${{ matrix.artifact_name }} .
 
     - name: Upload binary
@@ -103,23 +136,41 @@ jobs:
           echo "Creating release for tag: ${{ github.ref_name }}"
           echo "Full ref: ${{ github.ref }}"
 
-      - name: Download artifact
+      # Download all architecture artifacts
+      - name: Download AMD64 artifact
         uses: actions/download-artifact@v4
         with:
           name: filekeeper-linux-amd64
-          path: ./
+          path: ./artifacts
+
+      - name: Download ARM v7 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: filekeeper-linux-arm-v7
+          path: ./artifacts
+
+      - name: Download ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: filekeeper-linux-arm64
+          path: ./artifacts
 
       - name: List files
-        run: ls -la ./
+        run: ls -la ./artifacts/
 
-      - name: Make binary executable
-        run: chmod +x ./filekeeper-linux-amd64
+      - name: Make binaries executable
+        run: |
+          chmod +x ./artifacts/filekeeper-linux-amd64
+          chmod +x ./artifacts/filekeeper-linux-arm-v7
+          chmod +x ./artifacts/filekeeper-linux-arm64
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./filekeeper-linux-amd64
+            ./artifacts/filekeeper-linux-amd64
+            ./artifacts/filekeeper-linux-arm-v7
+            ./artifacts/filekeeper-linux-arm64
           draft: false
           prerelease: false
           generate_release_notes: true

@@ -6,6 +6,15 @@ A Go utility for automated file cleanup based on retention policies.
 
 FileKeeper helps you manage disk space by automatically removing files that are older than a specified retention period. It's designed for Linux systems and can be easily integrated with systemd for scheduled execution.
 
+### Supported Architectures
+
+FileKeeper is available for the following architectures:
+- x86-64 (AMD64)
+- ARM (ARMv7)
+- ARM64 (AArch64)
+
+This makes it suitable for use on a wide range of devices, from standard servers to Raspberry Pi and other ARM-based devices.
+
 ## Features
 
 - Clean up files based on configurable retention periods (e.g., 30d, 24h, 60m)
@@ -170,8 +179,11 @@ go mod init github.com/ykargin/filekeeper
 # Get dependencies
 go get gopkg.in/yaml.v3
 
-# Build for development
+# Build for development (current architecture)
 go build -o filekeeper
+
+# Build for all supported architectures
+./build_all.sh
 ```
 
 For more detailed instructions on contributing, please see [CONTRIBUTING.md](CONTRIBUTING.md).
