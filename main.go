@@ -223,7 +223,7 @@ func CreateSystemdFiles(userMode bool) error {
 	// Create the service file
 	serviceContent := `[Unit]
 Description=FileKeeper - Scheduled file cleanup based on retention policy
-Documentation=https://github.com/yourname/filekeeper
+Documentation=https://github.com/ykargin/filekeeper
 
 [Service]
 Type=oneshot
@@ -243,7 +243,7 @@ WantedBy=multi-user.target
 	if userMode {
 		serviceContent = `[Unit]
 Description=FileKeeper - Scheduled file cleanup based on retention policy
-Documentation=https://github.com/yourname/filekeeper
+Documentation=https://github.com/ykargin/filekeeper
 
 [Service]
 Type=oneshot
@@ -262,7 +262,7 @@ WantedBy=default.target
 	// Create the timer file
 	timerContent := `[Unit]
 Description=Run FileKeeper daily to clean up old files
-Documentation=https://github.com/yourname/filekeeper
+Documentation=https://github.com/ykargin/filekeeper
 
 [Timer]
 OnCalendar=daily
@@ -302,8 +302,8 @@ func PrintSystemdTemplates() {
 	fmt.Println("# Save to /etc/systemd/system/ (for system-wide) or ~/.config/systemd/user/ (for user)")
 	fmt.Println(`
 [Unit]
-Description=FileKeeper - Scheduled file cleanup based on retention policy
-Documentation=https://github.com/yourname/filekeeper
+Description=FileKeeper - Schedule file cleanup based on retention policy
+Documentation=https://github.com/ykargin/filekeeper
 
 [Service]
 Type=oneshot
@@ -324,7 +324,7 @@ WantedBy=multi-user.target
 	fmt.Println(`
 [Unit]
 Description=Run FileKeeper daily to clean up old files
-Documentation=https://github.com/yourname/filekeeper
+Documentation=https://github.com/ykargin/filekeeper
 
 [Timer]
 OnCalendar=daily
