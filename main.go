@@ -93,21 +93,19 @@ func init() {
 
 // ParseDuration parses a duration string like "30d", "24h", "60m"
 func ParseDuration(durationStr string) (time.Duration, error) {
-	// Handle days specially since Go doesn't have a built-in "d" unit
-	if strings.HasSuffix(durationStr, "d") {
-		days, err := fmt.Sscanf(durationStr, "%dd", new(int))
-		if err == nil && days == 1 {
-			value := strings.TrimSuffix(durationStr, "d")
-			days, err := fmt.Sscanf(value, "%d", new(int))
-			if err != nil {
-				return 0, err
-			}
-			return time.Hour * 24 * time.Duration(days), nil
-		}
-	}
+    // Handle days specially since Go doesn't have a built-in "d" unit
+    if strings.HasSuffix(durationStr, "d") {
+        value := strings.TrimSuffix(durationStr, "d")
+        var days int
+        _, err := fmt.Sscanf(value, "%d", &days)
+        if err == nil {
+            return time.Hour * 24 * time.Duration(days), nil
+        }
+        return 0, err
+    }
 
-	// For other units, use the standard time.ParseDuration
-	return time.ParseDuration(durationStr)
+    // For other units, use the standard time.ParseDuration
+    return time.ParseDuration(durationStr)
 }
 
 // GetDefaultConfig returns a default configuration
