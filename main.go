@@ -644,11 +644,22 @@ func main() {
 
 	flag.Parse()
 
-	// Show help and exit
-	if showHelp || len(os.Args) == 1 {
+	// Show help if requested
+	if showHelp {
 		PrintHelp()
 		fmt.Println("\nRun 'filekeeper --init' to create a default configuration file.")
 		return
+	}
+
+	// If no arguments and config doesn't exist, show help
+	if len(os.Args) == 1 {
+		_, err := os.Stat(configFile)
+		if os.IsNotExist(err) {
+			PrintHelp()
+			fmt.Println("\nRun 'filekeeper --init' to create a default configuration file.")
+			return
+		}
+		// Otherwise continue with default config
 	}
 
 	// Show version and exit
