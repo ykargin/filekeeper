@@ -4,7 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"os/user"
@@ -216,7 +216,7 @@ security:
     passes: 3
 `
 
-	return ioutil.WriteFile(configPath, []byte(configWithComments), 0644)
+	return os.WriteFile(configPath, []byte(configWithComments), 0644)
 }
 
 // CreateSystemdFiles creates the systemd service and timer files
@@ -274,7 +274,7 @@ WantedBy=default.target
 	}
 
 	servicePath := filepath.Join(systemdDir, "filekeeper.service")
-	if err := ioutil.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
 		return err
 	}
 
@@ -293,7 +293,7 @@ WantedBy=timers.target
 `
 
 	timerPath := filepath.Join(systemdDir, "filekeeper.timer")
-	if err := ioutil.WriteFile(timerPath, []byte(timerContent), 0644); err != nil {
+	if err := os.WriteFile(timerPath, []byte(timerContent), 0644); err != nil {
 		return err
 	}
 
@@ -353,7 +353,7 @@ WantedBy=timers.target`)
 
 // LoadConfig loads the configuration from a file
 func LoadConfig(configPath string) (Config, error) {
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return Config{}, err
 	}
@@ -584,7 +584,7 @@ func secureDeleteFile(path string, passes int, logger *log.Logger) error {
 func setupLogger(config LoggingConfig) (*log.Logger, error) {
 	if !config.Enabled {
 		// If logging is disabled, use a no-op logger
-		return log.New(ioutil.Discard, "", 0), nil
+		return log.New(io.Discard, "", 0), nil
 	}
 
 	// Ensure the log directory exists

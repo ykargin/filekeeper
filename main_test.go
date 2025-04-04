@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -54,7 +54,7 @@ func TestParseDuration(t *testing.T) {
 // TestIsDirEmpty tests the isDirEmpty function
 func TestIsDirEmpty(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := ioutil.TempDir("", "filekeeper-test")
+	tempDir, err := os.MkdirTemp("", "filekeeper-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestIsDirEmpty(t *testing.T) {
 
 	// Create a file in the directory
 	testFile := filepath.Join(tempDir, "testfile.txt")
-	if err := ioutil.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -129,7 +129,7 @@ func TestGetDefaultConfig(t *testing.T) {
 // TestConfigLoading tests the configuration loading functionality
 func TestConfigLoading(t *testing.T) {
 	// Create a temporary file with test configuration
-	tempFile, err := ioutil.TempFile("", "filekeeper-config-*.yaml")
+	tempFile, err := os.CreateTemp("", "filekeeper-config-*.yaml")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -212,7 +212,7 @@ security:
 	}
 
 	// Test loading invalid YAML
-	invalidFile, err := ioutil.TempFile("", "filekeeper-invalid-*.yaml")
+	invalidFile, err := os.CreateTemp("", "filekeeper-invalid-*.yaml")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -232,7 +232,7 @@ security:
 // TestProcessDirectory tests the directory processing functionality
 func TestProcessDirectory(t *testing.T) {
 	// Create a temporary directory structure for testing
-	testRoot, err := ioutil.TempDir("", "filekeeper-process-test")
+	testRoot, err := os.MkdirTemp("", "filekeeper-process-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestProcessDirectory(t *testing.T) {
 
 	// Create the files
 	for _, file := range []string{oldFile, newFile, nonMatchingFile, oldSubFile} {
-		if err := ioutil.WriteFile(file, []byte("test content"), 0644); err != nil {
+		if err := os.WriteFile(file, []byte("test content"), 0644); err != nil {
 			t.Fatalf("Failed to create test file %s: %v", file, err)
 		}
 	}
@@ -271,7 +271,7 @@ func TestProcessDirectory(t *testing.T) {
 	}
 
 	// Create a test logger
-	logger := log.New(ioutil.Discard, "", 0)
+	logger := log.New(io.Discard, "", 0)
 
 	// Test case 1: Process with pattern matching and include subdirs in dry run mode
 	dirConfig := DirectoryConfig{
@@ -373,7 +373,7 @@ func TestProcessDirectory(t *testing.T) {
 // TestSecureDeleteFile tests the secure file deletion functionality
 func TestSecureDeleteFile(t *testing.T) {
 	// Create a temporary file for testing
-	tempFile, err := ioutil.TempFile("", "filekeeper-secure-delete-test")
+	tempFile, err := os.CreateTemp("", "filekeeper-secure-delete-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestSecureDeleteFile(t *testing.T) {
 	tempFile.Close()
 
 	// Create a test logger
-	logger := log.New(ioutil.Discard, "", 0)
+	logger := log.New(io.Discard, "", 0)
 
 	// Test secure delete with 1 pass
 	err = secureDeleteFile(tempFile.Name(), 1, logger)
@@ -401,7 +401,7 @@ func TestSecureDeleteFile(t *testing.T) {
 	}
 
 	// Test with multiple passes and verify content between passes
-	tempFile2, err := ioutil.TempFile("", "filekeeper-secure-delete-multi-pass-test")
+	tempFile2, err := os.CreateTemp("", "filekeeper-secure-delete-multi-pass-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -437,8 +437,12 @@ func TestSecureDeleteFile(t *testing.T) {
 		var contentHashes []string
 
 		// Read initial content
-		file.Seek(0, 0)
-		file.Read(readBuf)
+		if _, err := file.Seek(0, 0); err != nil {
+			return err
+		}
+		if _, err := file.Read(readBuf); err != nil && err != io.EOF {
+			return err
+		}
 		initialHash := hashContent(readBuf)
 		contentHashes = append(contentHashes, initialHash)
 
@@ -475,8 +479,12 @@ func TestSecureDeleteFile(t *testing.T) {
 			}
 
 			// Read and verify content has changed
-			file.Seek(0, 0)
-			file.Read(readBuf)
+			if _, err := file.Seek(0, 0); err != nil {
+				return err
+			}
+			if _, err := file.Read(readBuf); err != nil && err != io.EOF {
+				return err
+			}
 			passHash := hashContent(readBuf)
 			
 			// Check that content is different from previous content
@@ -508,7 +516,7 @@ func TestSecureDeleteFile(t *testing.T) {
 	}
 
 	// Test with 0 passes (should handle gracefully)
-	tempFile3, err := ioutil.TempFile("", "filekeeper-secure-delete-zero-pass-test")
+	tempFile3, err := os.CreateTemp("", "filekeeper-secure-delete-zero-pass-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -538,7 +546,7 @@ func hashContent(data []byte) string {
 // TestWriteExampleConfig tests the configuration file creation
 func TestWriteExampleConfig(t *testing.T) {
 	// Create a temporary file for the config
-	tempDir, err := ioutil.TempDir("", "filekeeper-config-test")
+	tempDir, err := os.MkdirTemp("", "filekeeper-config-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
@@ -553,7 +561,7 @@ func TestWriteExampleConfig(t *testing.T) {
 	}
 
 	// Verify the file exists and has content
-	content, err := ioutil.ReadFile(configPath)
+	content, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Errorf("Failed to read example config file: %v", err)
 	}
@@ -598,7 +606,7 @@ func TestWriteExampleConfig(t *testing.T) {
 // TestSystemdFiles tests the creation of systemd files
 func TestSystemdFiles(t *testing.T) {
 	// Create a temporary directory for the systemd files
-	tempDir, err := ioutil.TempDir("", "filekeeper-systemd-test")
+	tempDir, err := os.MkdirTemp("", "filekeeper-systemd-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
@@ -628,14 +636,14 @@ func TestSystemdFiles(t *testing.T) {
 		// Create the service file
 		serviceContent := "Test service content"
 		servicePath := filepath.Join(systemdDir, "filekeeper.service")
-		if err := ioutil.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+		if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
 			return err
 		}
 
 		// Create the timer file
 		timerContent := "Test timer content"
 		timerPath := filepath.Join(systemdDir, "filekeeper.timer")
-		if err := ioutil.WriteFile(timerPath, []byte(timerContent), 0644); err != nil {
+		if err := os.WriteFile(timerPath, []byte(timerContent), 0644); err != nil {
 			return err
 		}
 
