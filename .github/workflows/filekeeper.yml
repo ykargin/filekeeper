@@ -1,3 +1,4 @@
+# Updated workflow for tag releases
 name: filekeeper
 
 on:
