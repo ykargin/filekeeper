@@ -402,6 +402,7 @@ func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, 
 		if info.ModTime().Before(cutoff) {
 			if securityConfig.DryRun {
 				logger.Printf("Would delete file: %s (modified: %s)", path, info.ModTime().Format(time.RFC3339))
+				fmt.Printf("Would delete file: %s (modified: %s)\n", path, info.ModTime().Format(time.RFC3339))
 			} else {
 				if securityConfig.SecureDelete.Enabled {
 					if err := secureDeleteFile(path, securityConfig.SecureDelete.Passes, logger); err != nil {
