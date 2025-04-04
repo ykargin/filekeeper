@@ -3,12 +3,21 @@ name: filekeeper
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main" ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: filekeeper-linux-amd64
+            asset_name: filekeeper-linux-amd64
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
 
@@ -26,10 +35,39 @@ jobs:
       run: go get -v gopkg.in/yaml.v3
 
     - name: Build
-      run: go build -v -o filekeeper .
+      run: go build -v -o ${{ matrix.artifact_name }} .
 
     - name: Upload binary
       uses: actions/upload-artifact@v4
       with:
-        name: filekeeper
-        path: filekeeper
+        name: ${{ matrix.artifact_name }}
+        path: ${{ matrix.artifact_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: filekeeper-linux-amd64
+          path: ./
+
+      - name: Make binary executable
+        run: chmod +x ./filekeeper-linux-amd64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./filekeeper-linux-amd64
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
