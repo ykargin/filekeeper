@@ -637,7 +637,7 @@ func PrintHelp() {
 	fmt.Println("\nExamples:")
 	fmt.Println("  filekeeper --init                   # Create default configuration")
 	fmt.Println("  filekeeper                          # Run with default configuration")
-	fmt.Println("  filekeeper --dry-run               # Simulate deletion without removing files")
+	fmt.Println("  filekeeper --dry-run                # Simulate deletion without removing files")
 	fmt.Println("  filekeeper --install-systemd        # Install systemd service and timer")
 }
 
