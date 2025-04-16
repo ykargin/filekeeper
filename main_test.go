@@ -128,6 +128,10 @@ func TestGetDefaultConfig(t *testing.T) {
 	if config.Security.SecureDelete.Passes != 3 {
 		t.Errorf("Default config has SecureDelete.Passes = %d, want 3", config.Security.SecureDelete.Passes)
 	}
+
+	if config.Security.SecureDelete.ObfuscateFilenames {
+		t.Error("Default config should have SecureDelete.ObfuscateFilenames set to false")
+	}
 }
 
 // TestConfigLoading tests the configuration loading functionality
@@ -157,6 +161,7 @@ security:
   secure_delete:
     enabled: true
     passes: 5
+    obfuscate_filenames: true
 `
 	if _, err := tempFile.Write([]byte(testConfig)); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
@@ -209,6 +214,10 @@ security:
 		t.Errorf("Loaded config has SecureDelete.Passes = %d, want 5", config.Security.SecureDelete.Passes)
 	}
 
+	if !config.Security.SecureDelete.ObfuscateFilenames {
+		t.Error("Loaded config should have SecureDelete.ObfuscateFilenames set to true")
+	}
+
 	// Test loading non-existent file
 	_, err = LoadConfig("/nonexistent-config-file.yaml")
 	if err == nil {
@@ -230,6 +239,124 @@ security:
 	_, err = LoadConfig(invalidFile.Name())
 	if err == nil {
 		t.Error("LoadConfig() did not return error for invalid YAML")
+	}
+}
+
+// TestObfuscateFilename tests the obfuscateFilename function
+func TestObfuscateFilename(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "filekeeper-obfuscate-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a test file
+	testFilePath := filepath.Join(tempDir, "test-file.txt")
+	if err := os.WriteFile(testFilePath, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Create a test logger
+	logger := log.New(io.Discard, "", 0)
+
+	// Test obfuscating a file name
+	newPath, err := obfuscateFilename(testFilePath, logger)
+	if err != nil {
+		t.Errorf("obfuscateFilename returned error: %v", err)
+	}
+
+	// Verify the result
+	if newPath == testFilePath {
+		t.Error("obfuscateFilename didn't change the file path")
+	}
+
+	// Check that the original file doesn't exist anymore
+	if _, err := os.Stat(testFilePath); !os.IsNotExist(err) {
+		t.Error("Original file still exists after obfuscation")
+	}
+
+	// Check that the new file exists
+	if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		t.Error("Obfuscated file doesn't exist")
+	}
+
+	// Verify the extension was preserved
+	if filepath.Ext(newPath) != ".txt" {
+		t.Errorf("File extension not preserved, got %s, want .txt", filepath.Ext(newPath))
+	}
+
+	// Verify the file content
+	content, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Errorf("Failed to read obfuscated file: %v", err)
+	}
+	if string(content) != "test content" {
+		t.Errorf("File content changed after obfuscation, got %s, want 'test content'", string(content))
+	}
+
+	// Test with non-existent file
+	_, err = obfuscateFilename("/nonexistent-file-for-test", logger)
+	if err == nil {
+		t.Error("obfuscateFilename did not return error for non-existent file")
+	}
+}
+
+// TestObfuscateDirectoryName tests the obfuscateDirectoryName function
+func TestObfuscateDirectoryName(t *testing.T) {
+	// Create a temporary directory for testing
+	parentDir, err := os.MkdirTemp("", "filekeeper-obfuscate-dir-test")
+	if err != nil {
+		t.Fatalf("Failed to create parent directory: %v", err)
+	}
+	defer os.RemoveAll(parentDir)
+
+	// Create a test directory
+	testDirPath := filepath.Join(parentDir, "test-dir")
+	if err := os.Mkdir(testDirPath, 0755); err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+
+	// Create a test file in the directory
+	testFilePath := filepath.Join(testDirPath, "test-file.txt")
+	if err := os.WriteFile(testFilePath, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Create a test logger
+	logger := log.New(io.Discard, "", 0)
+
+	// Test obfuscating a directory name
+	newPath, err := obfuscateDirectoryName(testDirPath, logger)
+	if err != nil {
+		t.Errorf("obfuscateDirectoryName returned error: %v", err)
+	}
+
+	// Verify the result
+	if newPath == testDirPath {
+		t.Error("obfuscateDirectoryName didn't change the directory path")
+	}
+
+	// Check that the original directory doesn't exist anymore
+	if _, err := os.Stat(testDirPath); !os.IsNotExist(err) {
+		t.Error("Original directory still exists after obfuscation")
+	}
+
+	// Check that the new directory exists
+	if _, err := os.Stat(newPath); os.IsNotExist(err) {
+		t.Error("Obfuscated directory doesn't exist")
+	}
+
+	// Verify the file inside still exists
+	newFilePath := filepath.Join(newPath, "test-file.txt")
+	if _, err := os.Stat(newFilePath); os.IsNotExist(err) {
+		t.Error("File inside obfuscated directory doesn't exist")
+	}
+
+	// Test with non-existent directory
+	_, err = obfuscateDirectoryName("/nonexistent-dir-for-test", logger)
+	if err == nil {
+		t.Error("obfuscateDirectoryName did not return error for non-existent directory")
 	}
 }
 
@@ -288,8 +415,9 @@ func TestProcessDirectory(t *testing.T) {
 	securityConfig := SecurityConfig{
 		DryRun: true, // Use dry run for testing
 		SecureDelete: SecureDeleteConfig{
-			Enabled: false,
-			Passes:  1,
+			Enabled:            false,
+			Passes:             1,
+			ObfuscateFilenames: false,
 		},
 	}
 
@@ -347,7 +475,7 @@ func TestProcessDirectory(t *testing.T) {
 
 	dirConfig.ExcludeSubdirs = false
 	dirConfig.RemoveEmptyDirs = true
-	
+
 	err = ProcessDirectory(dirConfig, securityConfig, logger)
 	if err != nil {
 		t.Errorf("ProcessDirectory returned error: %v", err)
@@ -371,6 +499,46 @@ func TestProcessDirectory(t *testing.T) {
 	err = ProcessDirectory(dirConfig, securityConfig, logger)
 	if err == nil {
 		t.Errorf("ProcessDirectory did not return error for invalid retention period")
+	}
+
+	// Test case 6: Test with ObfuscateFilenames enabled
+	// Recreate the test structure
+	oldFile = filepath.Join(testRoot, "sensitive-file.log")
+	if err := os.WriteFile(oldFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file %s: %v", oldFile, err)
+	}
+	if err := os.Chtimes(oldFile, oldTime, oldTime); err != nil {
+		t.Fatalf("Failed to set old file time: %v", err)
+	}
+
+	emptySubDir = filepath.Join(testRoot, "sensitive-empty-dir")
+	if err := os.Mkdir(emptySubDir, 0755); err != nil {
+		t.Fatalf("Failed to create empty subdirectory: %v", err)
+	}
+
+	dirConfig.Path = testRoot
+	dirConfig.RetentionPeriod = "7d"
+	dirConfig.FilePattern = "*.log"
+	dirConfig.ExcludeSubdirs = false
+	dirConfig.RemoveEmptyDirs = true
+
+	securityConfig.DryRun = false
+	securityConfig.SecureDelete.Enabled = false
+	securityConfig.SecureDelete.ObfuscateFilenames = true
+
+	err = ProcessDirectory(dirConfig, securityConfig, logger)
+	if err != nil {
+		t.Errorf("ProcessDirectory with ObfuscateFilenames returned error: %v", err)
+	}
+
+	// Verify old file was deleted
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Errorf("Sensitive file still exists after processing with ObfuscateFilenames")
+	}
+
+	// Verify empty directory was removed
+	if _, err := os.Stat(emptySubDir); !os.IsNotExist(err) {
+		t.Errorf("Sensitive empty directory still exists after processing with ObfuscateFilenames")
 	}
 }
 
@@ -490,7 +658,7 @@ func TestSecureDeleteFile(t *testing.T) {
 				return err
 			}
 			passHash := hashContent(readBuf)
-			
+
 			// Check that content is different from previous content
 			if pass > 0 && passHash == contentHashes[pass] {
 				t.Errorf("Pass %d content did not change from previous pass", pass+1)
@@ -584,6 +752,7 @@ func TestWriteExampleConfig(t *testing.T) {
 		"security:",
 		"dry_run:",
 		"secure_delete:",
+		"obfuscate_filenames:",
 	}
 
 	for _, section := range requiredSections {
@@ -595,7 +764,7 @@ func TestWriteExampleConfig(t *testing.T) {
 	// Test with existing parent directory
 	subDir := filepath.Join(tempDir, "nested", "config")
 	configInSubdir := filepath.Join(subDir, "config.yaml")
-	
+
 	err = WriteExampleConfig(configInSubdir)
 	if err != nil {
 		t.Errorf("WriteExampleConfig to nested directory returned error: %v", err)
@@ -974,7 +1143,7 @@ func TestCommandLineFlags(t *testing.T) {
 
 			// Create a channel to handle the potential os.Exit() call
 			exitCalled := make(chan int, 1)
-			
+
 			// Mock os.Exit
 			originalExit := osExit
 			osExit = func(code int) {
@@ -1140,14 +1309,14 @@ func TestInitFunction(t *testing.T) {
 	origIsRoot := isRoot
 	origConfigDir := configDir
 	origConfigFile := configFile
-	
+
 	// Restore after test
 	defer func() {
 		isRoot = origIsRoot
 		configDir = origConfigDir
 		configFile = origConfigFile
 	}()
-	
+
 	// Test cases for different user types
 	testCases := []struct {
 		name     string
@@ -1180,13 +1349,13 @@ func TestInitFunction(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Prepare to mock user.Current
 	origUserCurrent := userCurrent
 	defer func() {
 		userCurrent = origUserCurrent
 	}()
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Mock user.Current to return the desired UID
@@ -1195,20 +1364,20 @@ func TestInitFunction(t *testing.T) {
 					Uid: tc.uid,
 				}, nil
 			}
-			
+
 			// Reset global variables
 			isRoot = false
 			configDir = ""
 			configFile = ""
-			
+
 			// Call init manually (not the package init function)
 			initConfigPaths()
-			
+
 			// Verify the results
 			if isRoot != tc.expected.isRoot {
 				t.Errorf("isRoot = %v, want %v", isRoot, tc.expected.isRoot)
 			}
-			
+
 			if isRoot {
 				if configDir != "/etc/filekeeper" {
 					t.Errorf("Root config dir = %s, want /etc/filekeeper", configDir)
@@ -1220,7 +1389,7 @@ func TestInitFunction(t *testing.T) {
 				homeDir, _ := os.UserHomeDir()
 				expectedDir := filepath.Join(homeDir, ".config")
 				expectedFile := filepath.Join(homeDir, ".config", "filekeeper.yaml")
-				
+
 				if configDir != expectedDir {
 					t.Errorf("User config dir = %s, want %s", configDir, expectedDir)
 				}
