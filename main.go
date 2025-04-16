@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"crypto/rand"
+	"encoding/hex"
 	"gopkg.in/yaml.v3"
 )
 
@@ -58,8 +60,9 @@ type SecurityConfig struct {
 
 // SecureDeleteConfig contains secure deletion settings
 type SecureDeleteConfig struct {
-	Enabled bool `yaml:"enabled"`
-	Passes  int  `yaml:"passes"`
+	Enabled            bool `yaml:"enabled"`
+	Passes             int  `yaml:"passes"`
+	ObfuscateFilenames bool `yaml:"obfuscate_filenames"`
 }
 
 // Global variables
@@ -118,12 +121,12 @@ func ParseDuration(durationStr string) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// Check for negative duration
 	if duration < 0 {
 		return 0, fmt.Errorf("negative duration not allowed: %s", durationStr)
 	}
-	
+
 	return duration, nil
 }
 
@@ -156,8 +159,9 @@ func GetDefaultConfig() Config {
 		Security: SecurityConfig{
 			DryRun: false,
 			SecureDelete: SecureDeleteConfig{
-				Enabled: false,
-				Passes:  3,
+				Enabled:            false,
+				Passes:             3,
+				ObfuscateFilenames: false,
 			},
 		},
 	}
@@ -214,6 +218,8 @@ security:
     enabled: false
     # Number of passes for data overwrite
     passes: 3
+    # Obfuscate filenames before deletion to protect sensitive information in names
+    obfuscate_filenames: false
 `
 
 	return os.WriteFile(configPath, []byte(configWithComments), 0644)
@@ -366,6 +372,50 @@ func LoadConfig(configPath string) (Config, error) {
 	return config, nil
 }
 
+// obfuscateFilename renames a file to a random name in the same directory before deletion
+func obfuscateFilename(path string, logger *log.Logger) (string, error) {
+	dir := filepath.Dir(path)
+	ext := filepath.Ext(path)
+
+	// Generate random name
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random name: %v", err)
+	}
+
+	randomName := hex.EncodeToString(randomBytes)
+	// Keep the original extension to avoid changing file type and causing issues with deletion
+	newPath := filepath.Join(dir, randomName+ext)
+
+	// Rename the file
+	if err := os.Rename(path, newPath); err != nil {
+		return "", fmt.Errorf("failed to rename file: %v", err)
+	}
+
+	return newPath, nil
+}
+
+// obfuscateDirectoryName renames a directory to a random name in its parent directory
+func obfuscateDirectoryName(dirPath string, logger *log.Logger) (string, error) {
+	parentDir := filepath.Dir(dirPath)
+
+	// Generate random name
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random name: %v", err)
+	}
+
+	randomName := hex.EncodeToString(randomBytes)
+	newPath := filepath.Join(parentDir, randomName)
+
+	// Rename the directory
+	if err := os.Rename(dirPath, newPath); err != nil {
+		return "", fmt.Errorf("failed to rename directory: %v", err)
+	}
+
+	return newPath, nil
+}
+
 // ProcessDirectory processes a directory according to its configuration
 func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, logger *log.Logger) error {
 	logger.Printf("Processing directory: %s", dirConfig.Path)
@@ -424,17 +474,31 @@ func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, 
 				logger.Printf("Would delete file: %s (modified: %s)", path, info.ModTime().Format(time.RFC3339))
 				fmt.Printf("Would delete file: %s (modified: %s)\n", path, info.ModTime().Format(time.RFC3339))
 			} else {
+				originalPath := path
+
+				// Obfuscate filename if enabled (regardless of secure delete setting)
+				if securityConfig.SecureDelete.ObfuscateFilenames {
+					randomName, err := obfuscateFilename(path, logger)
+					if err != nil {
+						logger.Printf("Error obfuscating filename %s: %v", path, err)
+					} else {
+						path = randomName
+						logger.Printf("Obfuscated filename to: %s", path)
+					}
+				}
+
+				// Perform the actual deletion (secure or regular)
 				if securityConfig.SecureDelete.Enabled {
 					if err := secureDeleteFile(path, securityConfig.SecureDelete.Passes, logger); err != nil {
-						logger.Printf("Error securely deleting file %s: %v", path, err)
+						logger.Printf("Error securely deleting file %s: %v", originalPath, err)
 					} else {
-						logger.Printf("Securely deleted file: %s", path)
+						logger.Printf("Securely deleted file: %s", originalPath)
 					}
 				} else {
 					if err := os.Remove(path); err != nil {
-						logger.Printf("Error deleting file %s: %v", path, err)
+						logger.Printf("Error deleting file %s: %v", originalPath, err)
 					} else {
-						logger.Printf("Deleted file: %s", path)
+						logger.Printf("Deleted file: %s", originalPath)
 					}
 				}
 			}
@@ -488,10 +552,22 @@ func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, 
 				if securityConfig.DryRun {
 					logger.Printf("Would remove empty directory: %s", dir)
 				} else {
+					originalDir := dir
+					// Obfuscate directory name if enabled
+					if securityConfig.SecureDelete.ObfuscateFilenames {
+						randomName, err := obfuscateDirectoryName(dir, logger)
+						if err != nil {
+							logger.Printf("Error obfuscating directory name %s: %v", dir, err)
+						} else {
+							dir = randomName
+							logger.Printf("Obfuscated directory name to: %s", dir)
+						}
+					}
+
 					if err := os.Remove(dir); err != nil {
-						logger.Printf("Error removing directory %s: %v", dir, err)
+						logger.Printf("Error removing directory %s: %v", originalDir, err)
 					} else {
-						logger.Printf("Removed empty directory: %s", dir)
+						logger.Printf("Removed empty directory: %s", originalDir)
 					}
 				}
 			}
