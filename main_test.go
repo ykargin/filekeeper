@@ -281,9 +281,15 @@ func TestObfuscateFilename(t *testing.T) {
 		t.Error("Obfuscated file doesn't exist")
 	}
 
-	// Verify the extension was preserved
-	if filepath.Ext(newPath) != ".txt" {
-		t.Errorf("File extension not preserved, got %s, want .txt", filepath.Ext(newPath))
+	// Verify the extension was changed (no longer preserving original extension)
+	if filepath.Ext(newPath) == ".txt" {
+		t.Errorf("File extension was not obfuscated, still has original extension: %s", filepath.Ext(newPath))
+	}
+
+	// Verify the new extension exists and starts with a dot
+	ext := filepath.Ext(newPath)
+	if ext == "" || ext[0] != '.' {
+		t.Errorf("New file has invalid extension format: %s", ext)
 	}
 
 	// Verify the file content

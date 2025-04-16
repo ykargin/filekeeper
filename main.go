@@ -375,7 +375,6 @@ func LoadConfig(configPath string) (Config, error) {
 // obfuscateFilename renames a file to a random name in the same directory before deletion
 func obfuscateFilename(path string, logger *log.Logger) (string, error) {
 	dir := filepath.Dir(path)
-	ext := filepath.Ext(path)
 
 	// Generate random name
 	randomBytes := make([]byte, 16)
@@ -384,8 +383,15 @@ func obfuscateFilename(path string, logger *log.Logger) (string, error) {
 	}
 
 	randomName := hex.EncodeToString(randomBytes)
-	// Keep the original extension to avoid changing file type and causing issues with deletion
-	newPath := filepath.Join(dir, randomName+ext)
+
+	// Generate a random extension too (5 characters)
+	extRandomBytes := make([]byte, 3)
+	if _, err := rand.Read(extRandomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random extension: %v", err)
+	}
+	randomExt := "." + hex.EncodeToString(extRandomBytes)[:5]
+
+	newPath := filepath.Join(dir, randomName+randomExt)
 
 	// Rename the file
 	if err := os.Rename(path, newPath); err != nil {
