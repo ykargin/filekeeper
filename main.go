@@ -20,7 +20,7 @@ import (
 // Version information
 const (
 	ProgramName    = "FileKeeper"
-	ProgramVersion = "0.1.10"
+	ProgramVersion = "0.1.11"
 )
 
 // Config represents the main configuration structure
