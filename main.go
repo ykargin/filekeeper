@@ -254,10 +254,7 @@ Documentation=https://github.com/ykargin/filekeeper
 Type=oneshot
 ExecStart=/usr/local/bin/filekeeper
 
-# Security settings - adjust as needed
-ProtectSystem=strict
-ProtectHome=read-only
-PrivateTmp=true
+# Security settings - minimal to allow file access everywhere
 NoNewPrivileges=true
 
 [Install]
@@ -333,10 +330,7 @@ Documentation=https://github.com/ykargin/filekeeper
 Type=oneshot
 ExecStart=/usr/local/bin/filekeeper
 
-# Security settings - adjust as needed
-ProtectSystem=strict
-ProtectHome=read-only
-PrivateTmp=true
+# Security settings - minimal to allow file access everywhere
 NoNewPrivileges=true
 
 [Install]
