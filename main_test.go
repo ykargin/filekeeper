@@ -55,6 +55,90 @@ func TestParseDuration(t *testing.T) {
 	}
 }
 
+// TestShouldDeleteFile tests the shouldDeleteFile function with different time basis options
+func TestShouldDeleteFile(t *testing.T) {
+	// Create a temporary file for testing
+	tempFile, err := os.CreateTemp("", "filekeeper-timebasis-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	tempFile.Close()
+
+	// Set modification time to 10 days ago
+	oldTime := time.Now().Add(-10 * 24 * time.Hour)
+	if err := os.Chtimes(tempFile.Name(), oldTime, oldTime); err != nil {
+		t.Fatalf("Failed to set file times: %v", err)
+	}
+
+	// Get file info
+	info, err := os.Stat(tempFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to stat temp file: %v", err)
+	}
+
+	// Test cases
+	testCases := []struct {
+		name      string
+		timeBasis string
+		cutoff    time.Time
+		shouldDel bool
+	}{
+		{
+			name:      "mtime - file should be deleted",
+			timeBasis: "mtime",
+			cutoff:    time.Now().Add(-5 * 24 * time.Hour),
+			shouldDel: true,
+		},
+		{
+			name:      "mtime - file should NOT be deleted",
+			timeBasis: "mtime",
+			cutoff:    time.Now().Add(-15 * 24 * time.Hour),
+			shouldDel: false,
+		},
+		{
+			name:      "atime - file should be deleted",
+			timeBasis: "atime",
+			cutoff:    time.Now().Add(-5 * 24 * time.Hour),
+			shouldDel: true,
+		},
+		{
+			name:      "both - file should be deleted",
+			timeBasis: "both",
+			cutoff:    time.Now().Add(-5 * 24 * time.Hour),
+			shouldDel: true,
+		},
+		{
+			name:      "empty string defaults to mtime",
+			timeBasis: "",
+			cutoff:    time.Now().Add(-5 * 24 * time.Hour),
+			shouldDel: true,
+		},
+		{
+			name:      "invalid value defaults to mtime",
+			timeBasis: "invalid",
+			cutoff:    time.Now().Add(-5 * 24 * time.Hour),
+			shouldDel: true,
+		},
+		{
+			name:      "MTIME uppercase",
+			timeBasis: "MTIME",
+			cutoff:    time.Now().Add(-5 * 24 * time.Hour),
+			shouldDel: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := shouldDeleteFile(info, tc.cutoff, tc.timeBasis)
+			if result != tc.shouldDel {
+				t.Errorf("shouldDeleteFile(%s, cutoff, %s) = %v, want %v",
+					info.Name(), tc.timeBasis, result, tc.shouldDel)
+			}
+		})
+	}
+}
+
 // TestIsDirEmpty tests the isDirEmpty function
 func TestIsDirEmpty(t *testing.T) {
 	// Create a temporary directory for testing
@@ -116,6 +200,11 @@ func TestGetDefaultConfig(t *testing.T) {
 		t.Error("Default config should have at least one directory configured")
 	}
 
+	// Verify directory defaults
+	if config.Directories[0].TimeBasis != "mtime" {
+		t.Errorf("Default config has TimeBasis = %s, want \"mtime\"", config.Directories[0].TimeBasis)
+	}
+
 	// Verify security defaults
 	if config.Security.DryRun {
 		t.Error("Default config should have Security.DryRun set to false")
@@ -156,6 +245,7 @@ directories:
     file_pattern: "*.log"
     exclude_subdirs: true
     remove_empty_dirs: false
+    time_basis: "atime"
 security:
   dry_run: true
   secure_delete:
@@ -199,6 +289,9 @@ security:
 		}
 		if !dir.ExcludeSubdirs {
 			t.Error("Loaded config should have directory.ExcludeSubdirs set to true")
+		}
+		if dir.TimeBasis != "atime" {
+			t.Errorf("Loaded config has directory.TimeBasis = %s, want \"atime\"", dir.TimeBasis)
 		}
 	}
 
@@ -417,6 +510,7 @@ func TestProcessDirectory(t *testing.T) {
 		FilePattern:     "*.log",
 		ExcludeSubdirs:  false,
 		RemoveEmptyDirs: true,
+		TimeBasis:       "mtime",
 	}
 	securityConfig := SecurityConfig{
 		DryRun: true, // Use dry run for testing
@@ -755,6 +849,7 @@ func TestWriteExampleConfig(t *testing.T) {
 		"directories:",
 		"path:",
 		"retention_period:",
+		"time_basis:",
 		"security:",
 		"dry_run:",
 		"secure_delete:",

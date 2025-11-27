@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"crypto/rand"
@@ -50,6 +51,7 @@ type DirectoryConfig struct {
 	FilePattern     string `yaml:"file_pattern"`
 	ExcludeSubdirs  bool   `yaml:"exclude_subdirs"`
 	RemoveEmptyDirs bool   `yaml:"remove_empty_dirs"`
+	TimeBasis       string `yaml:"time_basis"`
 }
 
 // SecurityConfig contains security settings
@@ -154,6 +156,7 @@ func GetDefaultConfig() Config {
 				FilePattern:     "*.log",
 				ExcludeSubdirs:  false,
 				RemoveEmptyDirs: true,
+				TimeBasis:       "mtime",
 			},
 		},
 		Security: SecurityConfig{
@@ -207,6 +210,11 @@ directories:
     exclude_subdirs: false
     # Remove empty directories?
     remove_empty_dirs: true
+    # Time basis for deletion decision (mtime, atime, both)
+    # - mtime: modification time (default) - good for logs, build artifacts
+    # - atime: access time - good for media files, documents (may not work with noatime mount)
+    # - both: both times must be old - safest option, files live longer
+    time_basis: "mtime"
 
 # Security settings
 security:
@@ -366,6 +374,44 @@ func LoadConfig(configPath string) (Config, error) {
 	return config, nil
 }
 
+// shouldDeleteFile determines if a file should be deleted based on the time basis configuration
+func shouldDeleteFile(info os.FileInfo, cutoff time.Time, timeBasis string) bool {
+	// Default to mtime if not specified or invalid value
+	basis := strings.ToLower(strings.TrimSpace(timeBasis))
+	if basis == "" {
+		basis = "mtime"
+	}
+
+	mtime := info.ModTime()
+
+	// Get atime using Sys() - platform specific
+	var atime time.Time
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		atime = time.Unix(stat.Atim.Sec, stat.Atim.Nsec)
+	}
+
+	switch basis {
+	case "mtime":
+		return mtime.Before(cutoff)
+	case "atime":
+		// If atime is not available, fall back to mtime
+		if atime.IsZero() {
+			return mtime.Before(cutoff)
+		}
+		return atime.Before(cutoff)
+	case "both":
+		// Both times must be older than cutoff
+		if atime.IsZero() {
+			// If atime not available, use only mtime
+			return mtime.Before(cutoff)
+		}
+		return mtime.Before(cutoff) && atime.Before(cutoff)
+	default:
+		// Unknown value, default to mtime
+		return mtime.Before(cutoff)
+	}
+}
+
 // obfuscateFilename renames a file to a random name in the same directory before deletion
 func obfuscateFilename(path string, logger *log.Logger) (string, error) {
 	dir := filepath.Dir(path)
@@ -468,8 +514,8 @@ func ProcessDirectory(dirConfig DirectoryConfig, securityConfig SecurityConfig, 
 			}
 		}
 
-		// Check if the file is older than the cutoff
-		if info.ModTime().Before(cutoff) {
+		// Check if the file should be deleted based on the configured time basis
+		if shouldDeleteFile(info, cutoff, dirConfig.TimeBasis) {
 			if securityConfig.DryRun {
 				logger.Printf("Would delete file: %s (modified: %s)", path, info.ModTime().Format(time.RFC3339))
 				fmt.Printf("Would delete file: %s (modified: %s)\n", path, info.ModTime().Format(time.RFC3339))
