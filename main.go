@@ -387,7 +387,7 @@ func shouldDeleteFile(info os.FileInfo, cutoff time.Time, timeBasis string) bool
 	// Get atime using Sys() - platform specific
 	var atime time.Time
 	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-		atime = time.Unix(stat.Atim.Sec, stat.Atim.Nsec)
+		atime = time.Unix(int64(stat.Atim.Sec), int64(stat.Atim.Nsec))
 	}
 
 	switch basis {
